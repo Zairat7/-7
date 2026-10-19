@@ -1,0 +1,22 @@
+class Volunteer:
+    def __init__(self, id: int, name: str, city: str, lessons: int = 0):
+        self.id = id
+        self.name = name
+        self.city = city
+        self.lessons = lessons
+
+    def add_lesson(self):
+        """Увеличивает счетчик проведенных занятий на 1."""
+        self.lessons += 1
+
+    def to_string(self) -> str:
+        """Конвертирует объект в строку для записи в файл."""
+        return f"{self.id};{self.name};{self.city};{self.lessons}"
+
+    @classmethod
+    def from_string(cls, line: str):
+        """Создает объект из строки файла."""
+        parts = line.strip().split(';')
+        if len(parts) == 4:
+            return cls(int(parts[0]), parts[1], parts[2], int(parts[3]))
+        return None
