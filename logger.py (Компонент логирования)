@@ -1,0 +1,7 @@
+import datetime
+
+def log_action(action_text: str):
+    """Записывает действие координатора в текстовый файл аудита."""
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open("audit.log", "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {action_text}\n")
