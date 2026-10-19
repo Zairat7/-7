@@ -1,0 +1,105 @@
+from flask import Flask, render_template, request, redirect, url_for, flash
+from models import Volunteer
+from logger import log_action
+from utils import get_greeting, run_tests
+
+app = Flask(__name__)
+app.secret_key = "beeline_cyber_secret_key" # Для работы flash-уведомлений и валидации
+DATA_FILE = "data.txt"
+
+def load_volunteers() -> list:
+    """Загружает список волонтеров из текстового файла."""
+    volunteers = []
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    v = Volunteer.from_string(line)
+                    if v:
+                        volunteers.append(v)
+    except FileNotFoundError:
+        # Если файла нет, возвращаем пустой список
+        pass
+    return volunteers
+
+def save_volunteers(volunteers: list):
+    """Сохраняет список волонтеров в текстовый файл."""
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        for v in volunteers:
+            f.write(v.to_string() + "\n")
+
+@app.route('/')
+def index():
+    volunteers = load_volunteers()
+    sort_by = request.args.get('sort', 'rating') # По умолчанию сортируем по рейтингу
+    
+    # Подсчет глобальной статистики
+    total_volunteers = len(volunteers)
+    total_lessons = sum(v.lessons for v in volunteers)
+    
+    # Логика сортировки
+    if sort_by == 'name':
+        volunteers.sort(key=lambda x: x.name.lower())
+    else:
+        volunteers.sort(key=lambda x: x.lessons, reverse=True)
+        
+    greeting = get_greeting()
+    return render_template('index.html', 
+                           volunteers=volunteers, 
+                           greeting=greeting, 
+                           total_volunteers=total_volunteers, 
+                           total_lessons=total_lessons,
+                           current_sort=sort_by)
+
+@app.route('/add', methods=['GET', 'POST'])
+def add_volunteer():
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        city = request.form.get('city', '').strip()
+        
+        # Валидация ошибок: проверка на пустые поля
+        if not name or not city:
+            flash("Ошибка: Имя и город не могут быть пустыми!")
+            return redirect(url_for('add_volunteer'))
+            
+        volunteers = load_volunteers()
+        # Генерация уникального ID на основе максимального существующего
+        next_id = max([v.id for v in volunteers], default=0) + 1
+        
+        new_v = Volunteer(next_id, name, city, 0)
+        volunteers.append(new_v)
+        save_volunteers(volunteers)
+        
+        log_action(f"Добавлен новый волонтёр: {name} (ID: {next_id}, Город: {city})")
+        return redirect(url_for('index'))
+        
+    return render_template('add_volunteer.html')
+
+@app.route('/add_lesson/<int:id>')
+def add_lesson(id):
+    volunteers = load_volunteers()
+    for v in volunteers:
+        if v.id == id:
+            v.add_lesson()
+            log_action(f"Волонтёру {v.name} (ID: {id}) добавлено занятие. Всего: {v.lessons}")
+            break
+    save_volunteers(volunteers)
+    return redirect(url_for('index'))
+
+@app.route('/delete/<int:id>')
+def delete_volunteer(id):
+    volunteers = load_volunteers()
+    # Фильтруем список, исключая удаляемого волонтера
+    updated_volunteers = [v for v in volunteers if v.id != id]
+    
+    # Находим имя для логирования перед сохранением
+    deleted_name = next((v.name for v in volunteers if v.id == id), "Неизвестный")
+    
+    save_volunteers(updated_volunteers)
+    log_action(f"Удален волонтёр: {deleted_name} (ID: {id})")
+    return redirect(url_for('index'))
+
+if __name__ == '__main__':
+    # Запуск встроенных тестов перед стартом веб-сервера
+    run_tests()
+    app.run(debug=True, port=5000)
